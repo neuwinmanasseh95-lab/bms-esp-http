@@ -1,52 +1,58 @@
-// api/bms.js
-
-let latestData   = null;
+// Simple in-memory storage
+let latestData = null;
 let lastReceived = null;
 
 export default function handler(req, res) {
 
   // CORS
-  res.setHeader("Access-Control-Allow-Origin",  "*");
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
-    return res.status(204).end();
+    return res.status(200).end();
   }
 
-  // ───── POST (ESP32 sends data) ─────
+  // ───────── POST (ESP32 sends data) ─────────
   if (req.method === "POST") {
+    try {
+      const body = req.body;
 
-    const body = req.body;
+      console.log("Incoming Data:", body);
 
-    if (!body || !body.pack1 || !body.pack2) {
-      return res.status(400).json({ error: "Invalid payload" });
+      if (!body) {
+        return res.status(400).json({ error: "No data received" });
+      }
+
+      latestData = body;
+      lastReceived = Date.now();
+
+      return res.status(200).json({
+        success: true,
+        message: "Data received"
+      });
+
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
     }
-
-    latestData   = body;
-    lastReceived = Date.now();
-
-    return res.status(200).json({
-      ok: true,
-      received_at: lastReceived
-    });
   }
 
-  // ───── GET (Frontend fetches data) ─────
+  // ───────── GET (Frontend reads data) ─────────
   if (req.method === "GET") {
 
     if (!latestData) {
-      return res.status(200).json({
+      return res.json({
         status: "waiting",
         data: null
       });
     }
 
-    const stale = (Date.now() - lastReceived) > 5000;
+    const age = Date.now() - lastReceived;
 
-    return res.status(200).json({
-      status: stale ? "stale" : "live",
+    return res.json({
+      status: age > 5000 ? "stale" : "live",
       last_received: lastReceived,
+      age_ms: age,
       data: latestData
     });
   }
