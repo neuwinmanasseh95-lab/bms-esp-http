@@ -11,7 +11,6 @@
 let latestData   = null;
 let lastReceived = null;
 
-const API_SECRET = process.env.API_SECRET ?? "qwertyuiopasdfghjklzxcvbnm1234567890";
 
 export default function handler(req, res) {
   // ── CORS — allow the dashboard origin to poll this route ──
