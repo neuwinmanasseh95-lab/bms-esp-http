@@ -13,6 +13,6 @@
     { "src": "/(.*)",     "dest": "/public/$1"       }
   ],
   "env": {
-    "API_SECRET": "@api_secret"
+    "API_SECRET": "qwertyuiopasdfghjklzxcvbnm1234567890"
   }
 }
