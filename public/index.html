@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMS Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ── Reset & base ───────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #07090c;
+  --bg2:       #0d1117;
+  --bg3:       #111820;
+  --border:    #1c2533;
+  --border2:   #243040;
+  --text:      #c9d4e0;
+  --muted:     #4a5a6e;
+  --dim:       #2a3a4e;
+  --teal:      #00c9a7;
+  --teal-dim:  #004d40;
+  --amber:     #f59e0b;
+  --amber-dim: #451a03;
+  --red:       #ef4444;
+  --red-dim:   #450a0a;
+  --blue:      #38bdf8;
+  --blue-dim:  #082f49;
+  --good:      #22c55e;
+  --good-dim:  #052e16;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-ui:   'Barlow Condensed', sans-serif;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+/* ── Scanline overlay ───────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.logo-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.logo-title {
+  font-family: var(--font-ui);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.logo-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Live badge */
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: color 0.3s;
+}
+.live-badge.active { color: var(--good); }
+.live-badge.stale  { color: var(--amber); }
+.live-badge.error  { color: var(--red); }
+
+.pulse-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.live-badge.active .pulse-dot {
+  background: var(--good);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.live-badge.stale .pulse-dot  { background: var(--amber); }
+.live-badge.error .pulse-dot  { background: var(--red); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.75); }
+}
+
+.last-seen {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+/* RSSI */
+.rssi-block {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+}
+
+/* ── Waiting / error screen ─────────────────────────────────── */
+#waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 40vh;
+  gap: 14px;
+  color: var(--muted);
+}
+#waiting .w-title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+#waiting .w-sub {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.spinner {
+  width: 36px; height: 36px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--teal);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Section labels ─────────────────────────────────────────── */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+
+/* ── Temperature row ────────────────────────────────────────── */
+.temp-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 8px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px)  { .temp-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 500px)  { .temp-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.temp-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 8px 8px;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+.temp-card.warn   { border-color: var(--amber); background: var(--amber-dim); }
+.temp-card.danger { border-color: var(--red);   background: var(--red-dim); }
+
+.temp-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+  margin-bottom: 5px;
+}
+.temp-value {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--teal);
+  line-height: 1;
+}
+.temp-card.warn   .temp-value { color: var(--amber); }
+.temp-card.danger .temp-value { color: var(--red); }
+.temp-unit {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+/* ── Pack grid ──────────────────────────────────────────────── */
+.pack-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 700px) { .pack-grid { grid-template-columns: 1fr; } }
+
+.pack-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pack-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+
+.pack-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.pack-status-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.pack-status-badge.charging    { background: var(--good-dim);  color: var(--good); }
+.pack-status-badge.discharging { background: var(--blue-dim);  color: var(--blue); }
+
+.pack-body { padding: 14px 16px; }
+
+/* Cell bars */
+.cells-section { margin-bottom: 14px; }
+.cell-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.cell-id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  width: 22px;
+  flex-shrink: 0;
+}
+.cell-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg3);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.cell-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--teal);
+  transition: width 0.4s ease, background 0.3s;
+}
+.cell-bar-fill.warn   { background: var(--amber); }
+.cell-bar-fill.danger { background: var(--red); }
+
+.cell-volt {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  width: 52px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.cell-volt.warn   { color: var(--amber); }
+.cell-volt.danger { color: var(--red); }
+
+/* Pack stats row */
+.pack-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.stat-block { text-align: center; }
+.stat-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--teal);
+  line-height: 1;
+}
+.stat-unit {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── Footer status bar ──────────────────────────────────────── */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  flex-wrap: wrap;
+}
+.status-bar .sep { color: var(--border2); }
+.status-bar .ok  { color: var(--good); }
+.status-bar .err { color: var(--red); }
+
+/* ── Animations on data update ──────────────────────────────── */
+@keyframes flash {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+.flash { animation: flash 0.35s ease; }
+</style>
+</head>
+
+<body>
+<div class="shell">
+
+  <!-- ── Header ─────────────────────────────────────────── -->
+  <header>
+    <div class="logo-block">
+      <span class="logo-title">BMS Monitor</span>
+      <span class="logo-sub">ESP32 · 2-PACK · 8-CELL</span>
+    </div>
+    <div class="header-right">
+      <div class="rssi-block" id="rssi">RSSI —</div>
+      <div class="last-seen" id="last-seen">—</div>
+      <div class="live-badge" id="live-badge">
+        <div class="pulse-dot"></div>
+        <span id="live-text">WAITING</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Waiting state ──────────────────────────────────── -->
+  <div id="waiting">
+    <div class="spinner"></div>
+    <div class="w-title">Awaiting ESP32</div>
+    <div class="w-sub">Polling /api/bms every second…</div>
+  </div>
+
+  <!-- ── Main dashboard (hidden until data arrives) ─────── -->
+  <div id="dashboard" style="display:none">
+
+    <!-- Temperature -->
+    <div class="section-label">Temperature sensors — CH0 to CH7</div>
+    <div class="temp-grid" id="temp-grid"></div>
+
+    <!-- Packs -->
+    <div class="section-label">Battery packs</div>
+    <div class="pack-grid">
+      <div class="pack-card" id="pack1-card">
+        <div class="pack-header">
+          <span class="pack-name">Pack 1 — CH8→CH11</span>
+          <span class="pack-status-badge" id="p1-badge">—</span>
+        </div>
+        <div class="pack-body">
+          <div class="cells-section" id="p1-cells"></div>
+          <div class="pack-stats">
+            <div class="stat-block">
+              <div class="stat-label">Total</div>
+              <div class="stat-value" id="p1-total">—</div>
+              <div class="stat-unit">V</div>
+            </div>
+            <div class="stat-block">
+              <div class="stat-label">Current</div>
+              <div class="stat-value" id="p1-amps">—</div>
+              <div class="stat-unit">A</div>
+            </div>
+            <div class="stat-block">
+              <div class="stat-label">Power</div>
+              <div class="stat-value" id="p1-power">—</div>
+              <div class="stat-unit">W</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pack-card" id="pack2-card">
+        <div class="pack-header">
+          <span class="pack-name">Pack 2 — CH12→CH15</span>
+          <span class="pack-status-badge" id="p2-badge">—</span>
+        </div>
+        <div class="pack-body">
+          <div class="cells-section" id="p2-cells"></div>
+          <div class="pack-stats">
+            <div class="stat-block">
+              <div class="stat-label">Total</div>
+              <div class="stat-value" id="p2-total">—</div>
+              <div class="stat-unit">V</div>
+            </div>
+            <div class="stat-block">
+              <div class="stat-label">Current</div>
+              <div class="stat-value" id="p2-amps">—</div>
+              <div class="stat-unit">A</div>
+            </div>
+            <div class="stat-block">
+              <div class="stat-label">Power</div>
+              <div class="stat-value" id="p2-power">—</div>
+              <div class="stat-unit">W</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span>DEVICE <span id="sb-device" class="ok">—</span></span>
+      <span class="sep">|</span>
+      <span>UPTIME <span id="sb-uptime">—</span></span>
+      <span class="sep">|</span>
+      <span>RSSI <span id="sb-rssi">—</span> dBm</span>
+      <span class="sep">|</span>
+      <span>API POLLS <span id="sb-polls" class="ok">0</span></span>
+      <span class="sep">|</span>
+      <span>ERRORS <span id="sb-errors" class="ok">0</span></span>
+      <span class="sep">|</span>
+      <span id="sb-ts">—</span>
+    </div>
+
+  </div><!-- /#dashboard -->
+</div><!-- /.shell -->
+
+<script>
+// ── Config ──────────────────────────────────────────────────────
+const POLL_MS      = 1000;
+const API_URL      = "/api/bms";
+
+// Lithium cell voltage thresholds (3.0 V min, 4.2 V max)
+const CELL_MIN     = 2.8;
+const CELL_MAX     = 4.2;
+const CELL_WARN    = 3.2;   // below this → amber
+const CELL_DANGER  = 3.0;   // below this → red
+
+const TEMP_WARN    = 45;    // °C
+const TEMP_DANGER  = 55;
+
+// ── State ───────────────────────────────────────────────────────
+let pollCount  = 0;
+let errorCount = 0;
+let hasData    = false;
+
+// ── DOM refs ────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const liveBadge = $("live-badge");
+const liveText  = $("live-text");
+
+// ── Helpers ─────────────────────────────────────────────────────
+function fmt(v, dec = 3) {
+  return (typeof v === "number" && !isNaN(v)) ? v.toFixed(dec) : "—";
+}
+
+function cellClass(v) {
+  if (v < CELL_DANGER) return "danger";
+  if (v < CELL_WARN)   return "warn";
+  return "";
+}
+
+// 0–100 % fill based on cell voltage range
+function cellPct(v) {
+  const pct = ((v - CELL_MIN) / (CELL_MAX - CELL_MIN)) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
+
+function flash(el) {
+  if (!el) return;
+  el.classList.remove("flash");
+  void el.offsetWidth;   // force reflow
+  el.classList.add("flash");
+}
+
+function msToUptime(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+// ── Build temperature grid (once) ───────────────────────────────
+function buildTempGrid() {
+  const grid = $("temp-grid");
+  grid.innerHTML = "";
+  for (let i = 0; i < 8; i++) {
+    grid.innerHTML += `
+      <div class="temp-card" id="tc${i}">
+        <div class="temp-label">T${i + 1}</div>
+        <div class="temp-value" id="tv${i}">—</div>
+        <div class="temp-unit">°C</div>
+      </div>`;
+  }
+}
+
+// ── Build cell rows for a pack (once) ───────────────────────────
+function buildCells(containerId, prefix) {
+  const el = $(containerId);
+  el.innerHTML = "";
+  for (let i = 1; i <= 4; i++) {
+    el.innerHTML += `
+      <div class="cell-row">
+        <div class="cell-id">C${i}</div>
+        <div class="cell-bar-track">
+          <div class="cell-bar-fill" id="${prefix}-bar${i}" style="width:0%"></div>
+        </div>
+        <div class="cell-volt" id="${prefix}-v${i}">—</div>
+      </div>`;
+  }
+}
+
+// ── Update UI with fresh data ────────────────────────────────────
+function applyData(snapshot) {
+  const d = snapshot.data;
+
+  // ─ Status badge ─
+  const live = snapshot.status === "live";
+  liveBadge.className = "live-badge " + (live ? "active" : "stale");
+  liveText.textContent = live ? "LIVE" : "STALE";
+
+  // ─ Header meta ─
+  const rssi = d.wifi_rssi_sta ?? "—";
+  $("rssi").textContent    = `RSSI ${rssi} dBm`;
+  $("sb-rssi").textContent = rssi;
+  $("sb-device").textContent = d.device_id ?? "—";
+  $("sb-uptime").textContent = msToUptime(d.timestamp_ms ?? 0);
+  $("sb-polls").textContent  = pollCount;
+  $("sb-errors").textContent = errorCount;
+  $("sb-ts").textContent     = new Date().toLocaleTimeString();
+  $("last-seen").textContent = `${snapshot.age_ms ?? 0} ms ago`;
+
+  // ─ Temperatures ─
+  const temps = d.temperature_c ?? [];
+  for (let i = 0; i < 8; i++) {
+    const v   = temps[i];
+    const card = $(`tc${i}`);
+    const val  = $(`tv${i}`);
+    if (v === null || v === undefined) {
+      val.textContent  = "ERR";
+      card.className   = "temp-card danger";
+    } else {
+      const n = parseFloat(v);
+      val.textContent  = fmt(n, 1);
+      card.className   = "temp-card" +
+        (n >= TEMP_DANGER ? " danger" : n >= TEMP_WARN ? " warn" : "");
+    }
+  }
+
+  // ─ Pack updater ─
+  function updatePack(pk, prefix) {
+    const cells = [pk.cell1_v, pk.cell2_v, pk.cell3_v, pk.cell4_v]
+                  .map(x => parseFloat(x));
+
+    for (let i = 1; i <= 4; i++) {
+      const v   = cells[i - 1];
+      const cls = cellClass(v);
+      const bar = $(`${prefix}-bar${i}`);
+      const lbl = $(`${prefix}-v${i}`);
+      bar.style.width = cellPct(v) + "%";
+      bar.className   = "cell-bar-fill" + (cls ? " " + cls : "");
+      lbl.textContent = fmt(v);
+      lbl.className   = "cell-volt" + (cls ? " " + cls : "");
+    }
+
+    $(`${prefix}-total`).textContent = fmt(parseFloat(pk.total_v));
+    $(`${prefix}-amps`).textContent  = fmt(parseFloat(pk.current_a), 2);
+    $(`${prefix}-power`).textContent = fmt(parseFloat(pk.power_w), 1);
+
+    const badge = $(`${prefix}-badge`);
+    const st    = pk.status ?? "";
+    badge.textContent = st.toUpperCase();
+    badge.className   = "pack-status-badge " + st;
+  }
+
+  updatePack(d.pack1, "p1");
+  updatePack(d.pack2, "p2");
+
+  // flash on each update
+  flash($("dashboard"));
+}
+
+// ── Poll loop ────────────────────────────────────────────────────
+async function poll() {
+  pollCount++;
+  try {
+    const res  = await fetch(API_URL);
+    const json = await res.json();
+
+    if (!hasData && json.data) {
+      // First data — show dashboard, hide waiting
+      hasData = true;
+      $("waiting").style.display   = "none";
+      $("dashboard").style.display = "block";
+      buildTempGrid();
+      buildCells("p1-cells", "p1");
+      buildCells("p2-cells", "p2");
+    }
+
+    if (json.data) {
+      applyData(json);
+    } else {
+      // Still waiting
+      liveBadge.className = "live-badge";
+      liveText.textContent = "WAITING";
+    }
+
+  } catch (err) {
+    errorCount++;
+    $("sb-errors").textContent = errorCount;
+    liveBadge.className = "live-badge error";
+    liveText.textContent = "ERROR";
+    console.error("[BMS] Poll error:", err);
+  }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
