@@ -1,77 +1,51 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>BMS Dashboard</title>
-  <style>
-    body {
-      font-family: Arial;
-      background: #0f172a;
-      color: white;
-      text-align: center;
-    }
-    .card {
-      background: #1e293b;
-      padding: 20px;
-      margin: 20px;
-      border-radius: 10px;
-    }
-  </style>
+  <title>BMS Monitor</title>
 </head>
 <body>
 
-<h1>🔋 ESP32 BMS Dashboard</h1>
+<h1>ESP32 BMS Dashboard</h1>
 
-<div class="card">
-  <h2>Status: <span id="status">...</span></h2>
-  <p>Last Update: <span id="time">...</span></p>
-</div>
+<h2 id="device"></h2>
+<p>RSSI: <span id="rssi"></span></p>
 
-<div class="card">
-  <h2>Pack 1</h2>
-  <p>Total Voltage: <span id="p1v"></span> V</p>
-  <p>Current: <span id="p1a"></span> A</p>
-  <p>Power: <span id="p1w"></span> W</p>
-</div>
+<h3>Temperatures</h3>
+<ul id="temps"></ul>
 
-<div class="card">
-  <h2>Pack 2</h2>
-  <p>Total Voltage: <span id="p2v"></span> V</p>
-  <p>Current: <span id="p2a"></span> A</p>
-  <p>Power: <span id="p2w"></span> W</p>
-</div>
+<h3>Pack 1</h3>
+<p id="p1"></p>
+
+<h3>Pack 2</h3>
+<p id="p2"></p>
 
 <script>
-const API = "/api/bms";
+async function loadData() {
+  const res = await fetch("/api/bms");
+  const data = await res.json();
 
-async function fetchData() {
-  try {
-    const res = await fetch(API);
-    const json = await res.json();
+  if (!data.device_id) return;
 
-    document.getElementById("status").innerText = json.status;
+  document.getElementById("device").innerText = data.device_id;
+  document.getElementById("rssi").innerText = data.wifi_rssi;
 
-    if (!json.data) return;
+  // Temps
+  let tempHTML = "";
+  data.temperature_c.forEach((t, i) => {
+    tempHTML += `<li>Sensor ${i}: ${t ?? "N/A"} °C</li>`;
+  });
+  document.getElementById("temps").innerHTML = tempHTML;
 
-    document.getElementById("time").innerText =
-      new Date(json.last_received).toLocaleTimeString();
+  // Pack 1
+  document.getElementById("p1").innerText =
+    `Total: ${data.pack1.total_v}V | Current: ${data.pack1.current_a}A | Power: ${data.pack1.power_w}W`;
 
-    const p1 = json.data.pack1;
-    const p2 = json.data.pack2;
-
-    document.getElementById("p1v").innerText = p1.total_v;
-    document.getElementById("p1a").innerText = p1.current_a;
-    document.getElementById("p1w").innerText = p1.power_w;
-
-    document.getElementById("p2v").innerText = p2.total_v;
-    document.getElementById("p2a").innerText = p2.current_a;
-    document.getElementById("p2w").innerText = p2.power_w;
-
-  } catch (e) {
-    console.log("Error:", e);
-  }
+  // Pack 2
+  document.getElementById("p2").innerText =
+    `Total: ${data.pack2.total_v}V | Current: ${data.pack2.current_a}A | Power: ${data.pack2.power_w}W`;
 }
 
-setInterval(fetchData, 1000);
+setInterval(loadData, 2000);
 </script>
 
 </body>
