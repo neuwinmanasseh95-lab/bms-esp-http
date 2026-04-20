@@ -1,61 +1,32 @@
-// Simple in-memory storage
-let latestData = null;
-let lastReceived = null;
+let latestBMS = null;
 
 export default function handler(req, res) {
-
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  // ───────── POST (ESP32 sends data) ─────────
   if (req.method === "POST") {
     try {
-      const body = req.body;
+      const data = req.body;
 
-      console.log("Incoming Data:", body);
-
-      if (!body) {
-        return res.status(400).json({ error: "No data received" });
+      // Basic validation
+      if (!data.device_id) {
+        return res.status(400).json({ error: "Invalid data" });
       }
 
-      latestData = body;
-      lastReceived = Date.now();
+      latestBMS = data;
+
+      console.log("Received BMS:", data);
 
       return res.status(200).json({
-        success: true,
-        message: "Data received"
+        status: "OK",
+        received: true
       });
 
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Server error" });
     }
   }
 
-  // ───────── GET (Frontend reads data) ─────────
   if (req.method === "GET") {
-
-    if (!latestData) {
-      return res.json({
-        status: "waiting",
-        data: null
-      });
-    }
-
-    const age = Date.now() - lastReceived;
-
-    return res.json({
-      status: age > 5000 ? "stale" : "live",
-      last_received: lastReceived,
-      age_ms: age,
-      data: latestData
-    });
+    return res.status(200).json(latestBMS || {});
   }
 
-  return res.status(405).json({ error: "Method not allowed" });
+  res.status(405).json({ error: "Method not allowed" });
 }
