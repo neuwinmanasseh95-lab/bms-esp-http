@@ -1,22 +1,17 @@
 let latestBMS = null;
 
 export default function handler(req, res) {
+
+  // 🚫 REMOVE ALL AUTH CHECKS
+
   if (req.method === "POST") {
     try {
-      const data = req.body;
+      latestBMS = req.body;
 
-      // Basic validation
-      if (!data.device_id) {
-        return res.status(400).json({ error: "Invalid data" });
-      }
-
-      latestBMS = data;
-
-      console.log("Received BMS:", data);
+      console.log("BMS Received:", latestBMS);
 
       return res.status(200).json({
-        status: "OK",
-        received: true
+        status: "received"
       });
 
     } catch (err) {
@@ -25,8 +20,11 @@ export default function handler(req, res) {
   }
 
   if (req.method === "GET") {
-    return res.status(200).json(latestBMS || {});
+    return res.status(200).json({
+      status: latestBMS ? "ok" : "waiting",
+      data: latestBMS
+    });
   }
 
-  res.status(405).json({ error: "Method not allowed" });
+  return res.status(405).json({ error: "Method not allowed" });
 }
